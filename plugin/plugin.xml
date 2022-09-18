@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://plugin.powerschool.pearson.com"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://plugin.powerschool.pearson.com plugin.xsd"
+        name="headsup_PowerQueryTest"
+        version="0.7"
+        description="PowerQuery Plugin for TestServer v.8.3">
+	<oauth></oauth>
+	<access_request>
+		<field table="students" field="id" access="ViewOnly" />
+		<field table="students" field="dcid" access="ViewOnly" />
+		<field table="students" field="student_number" access="ViewOnly" />
+		<field table="students" field="lastfirst" access="ViewOnly" />
+		<field table="students" field="first_name" access="ViewOnly" />
+		<field table="students" field="last_name" access="ViewOnly" />
+		<field table="students" field="grade_level" access="ViewOnly" />
+		<field table="students" field="entrydate" access="ViewOnly" />
+		<field table="students" field="exitdate" access="ViewOnly" />
+		<field table="students" field="enroll_status" access="ViewOnly" />
+		<field table="psm_studentcontact" field="email" access="ViewOnly" />
+		<field table="psm_studentcontact" field="studentid" access="ViewOnly" />
+		<field table="psm_studentcontact" field="studentcontacttypeid" access="ViewOnly" />
+		<field table="sync_studentmap" field="studentsdcid" access="ViewOnly" />
+		<field table="sync_studentmap" field="studentid" access="ViewOnly" />
+		<field table="teachers" field="id" access="ViewOnly" />
+		<field table="teachers" field="first_name" access="ViewOnly" />
+		<field table="teachers" field="last_name" access="ViewOnly" />
+		<field table="teachers" field="lastfirst" access="ViewOnly" />
+		<field table="teachers" field="email_addr" access="ViewOnly" />
+		<field table="teachers" field="sched_department" access="ViewOnly" />
+		<field table="teachers" field="status" access="ViewOnly" />
+		<field table="teachers" field="schoolid" access="ViewOnly" />
+		<field table="schools" field="abbreviation" access="ViewOnly" />
+		<field table="schools" field="name" access="ViewOnly" />
+		<field table="schools" field="id" access="ViewOnly" />
+		<field table="schools" field="dcid" access="ViewOnly" />
+		<field table="sections" field="course_number" access="ViewOnly" />
+		<field table="sections" field="dcid" access="ViewOnly" />
+		<field table="sections" field="id" access="ViewOnly" />
+		<field table="sections" field="section_number" access="ViewOnly" />
+		<field table="sections" field="schoolid" access="ViewOnly" />
+		<field table="sections" field="expression" access="ViewOnly" />
+		<field table="sections" field="termid" access="ViewOnly" />
+		<field table="sections" field="room" access="ViewOnly" />
+		<field table="sections" field="teacher" access="ViewOnly" />
+		<field table="sections" field="expression" access="ViewOnly" />
+		<field table="sections" field="no_of_students" access="ViewOnly" />
+		<field table="courses" field="course_name" access="ViewOnly" />
+		<field table="courses" field="course_number" access="ViewOnly" />
+		<field table="courses" field="sched_department" access="ViewOnly" />
+		<field table="courses" field="dcid" access="ViewOnly" />
+		<field table="courses" field="schoolid" access="ViewOnly" />
+		<field table="terms" field="schoolid" access="ViewOnly" />
+		<field table="terms" field="yearid" access="ViewOnly" />
+		<field table="terms" field="firstday" access="ViewOnly" />
+		<field table="terms" field="lastday" access="ViewOnly" />
+		<field table="terms" field="dcid" access="ViewOnly" />
+		<field table="terms" field="id" access="ViewOnly" />
+		<field table="terms" field="name" access="ViewOnly" />
+		<field table="terms" field="portion" access="ViewOnly" />
+		<field table="terms" field="abbreviation" access="ViewOnly" />
+		<field table="cc" field="sectionid" access="ViewOnly" />
+		<field table="cc" field="studentid" access="ViewOnly" />
+		<field table="calendar_day" field="id" access="ViewOnly" />
+		<field table="calendar_day" field="date_value" access="ViewOnly" />
+		<field table="calendar_day" field="cycle_day_id" access="ViewOnly" />
+		<field table="calendar_day" field="insession" access="ViewOnly" />
+		<field table="calendar_day" field="note" access="ViewOnly" />
+		<field table="calendar_day" field="type" access="ViewOnly" />
+		<field table="calendar_day" field="week_num" access="ViewOnly" />
+		<field table="calendar_day" field="bell_schedule_id" access="ViewOnly" />
+		<field table="calendar_day" field="schoolid" access="ViewOnly" />
+		<field table="bell_schedule" field="name" access="ViewOnly" />
+		<field table="bell_schedule" field="schoolid" access="ViewOnly" />
+		<field table="bell_schedule" field="year_id" access="ViewOnly" />
+		<field table="bell_schedule" field="id" access="ViewOnly" />
+		<field table="bell_schedule" field="dcid" access="ViewOnly" />
+		<field table="bell_schedule" field="name" access="ViewOnly" />
+		<field table="bell_schedule" field="schoolid" access="ViewOnly" />
+		<field table="bell_schedule" field="year_id" access="ViewOnly" />
+		<field table="bell_schedule_items" field="daily_time_in_default" access="ViewOnly" />
+		<field table="bell_schedule_items" field="daily_time_out_default" access="ViewOnly" />
+		<field table="bell_schedule_items" field="start_time" access="ViewOnly" />
+		<field table="bell_schedule_items" field="end_time" access="ViewOnly" />
+		<field table="bell_schedule_items" field="minutes_attended" access="ViewOnly" />
+		<field table="bell_schedule_items" field="period_id" access="ViewOnly" />
+		<field table="bell_schedule_items" field="bell_schedule_id" access="ViewOnly" />
+		<field table="cc" field="id" access="ViewOnly" />
+		<field table="cc" field="dcid" access="ViewOnly" />
+		<field table="cc" field="studentid" access="ViewOnly" />
+		<field table="cc" field="sectionid" access="ViewOnly" />
+		<field table="cc" field="dateenrolled" access="ViewOnly" />
+		<field table="cc" field="dateleft" access="ViewOnly" />
+		<field table="cc" field="schoolid" access="ViewOnly" />
+		<field table="cc" field="termid" access="ViewOnly" />
+		<field table="cc" field="section_number" access="ViewOnly" />
+		<field table="period" field="period_number" access="ViewOnly" />
+		<field table="period" field="id" access="ViewOnly" />
+		<field table="period" field="abbreviation" access="ViewOnly" />
+		<field table="period" field="year_id" access="ViewOnly" />
+		<field table="section_meeting" field="period_number" access="ViewOnly" />
+		<field table="section_meeting" field="meeting" access="ViewOnly" />
+		<field table="section_meeting" field="schoolid" access="ViewOnly" />
+		<field table="section_meeting" field="cycle_day_letter" access="ViewOnly" />
+		<field table="section_meeting" field="year_id" access="ViewOnly" />
+		<field table="section_meeting" field="sectionid" access="ViewOnly" />
+		<field table="section_meeting" field="id" access="ViewOnly" />
+		<field table="cycle_day" field="letter" access="ViewOnly" />
+		<field table="cycle_day" field="id" access="ViewOnly" />
+<field table="bell_schedule" field="id" access="ViewOnly" />
+<field table="bell_schedule" field="name" access="ViewOnly" />
+<field table="bell_schedule" field="schoolid" access="ViewOnly" />
+<field table="bell_schedule" field="year_id" access="ViewOnly" />
+<field table="bell_schedule_items" field="bell_schedule_id" access="ViewOnly" />
+<field table="bell_schedule_items" field="end_time" access="ViewOnly" />
+<field table="bell_schedule_items" field="period_id" access="ViewOnly" />
+<field table="bell_schedule_items" field="start_time" access="ViewOnly" />
+<field table="calendar_day" field="bell_schedule_id" access="ViewOnly" />
+<field table="calendar_day" field="cycle_day_id" access="ViewOnly" />
+<field table="calendar_day" field="date_value" access="ViewOnly" />
+<field table="calendar_day" field="id" access="ViewOnly" />
+<field table="calendar_day" field="dcid" access="ViewOnly" />
+<field table="courses" field="course_name" access="ViewOnly" />
+<field table="courses" field="course_number" access="ViewOnly" />
+<field table="cycle_day" field="id" access="ViewOnly" />
+<field table="cycle_day" field="letter" access="ViewOnly" />
+<field table="period" field="abbreviation" access="ViewOnly" />
+<field table="period" field="id" access="ViewOnly" />
+<field table="period" field="period_number" access="ViewOnly" />
+<field table="section_meeting" field="cycle_day_letter" access="ViewOnly" />
+<field table="section_meeting" field="meeting" access="ViewOnly" />
+<field table="section_meeting" field="period_number" access="ViewOnly" />
+<field table="section_meeting" field="schoolid" access="ViewOnly" />
+<field table="section_meeting" field="sectionid" access="ViewOnly" />
+<field table="sections" field="course_number" access="ViewOnly" />
+<field table="sections" field="dcid" access="ViewOnly" />
+<field table="sections" field="id" access="ViewOnly" />
+<field table="sections" field="no_of_students" access="ViewOnly" />
+<field table="sections" field="schoolid" access="ViewOnly" />
+<field table="sections" field="teacher" access="ViewOnly" />
+<field table="sections" field="termid" access="ViewOnly" />
+<field table="teachers" field="email_addr" access="ViewOnly" />
+<field table="teachers" field="id" access="ViewOnly" />
+<field table="teachers" field="last_name" access="ViewOnly" />
+<field table="teachers" field="lastfirst" access="ViewOnly" />
+<field table="terms" field="firstday" access="ViewOnly" />
+<field table="terms" field="id" access="ViewOnly" />
+<field table="terms" field="lastday" access="ViewOnly" />
+<field table="terms" field="schoolid" access="ViewOnly" />
+<field table="terms" field="yearid" access="ViewOnly" />
+
+	</access_request>
+    <publisher name="ACS OF AMMAN">
+        <contact email="pbowman@acsamman.edu.jo"/>
+    </publisher>
+</plugin>

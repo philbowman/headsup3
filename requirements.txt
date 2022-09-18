@@ -1,0 +1,8 @@
+pypowerschool
+google-api-python-client
+oauth2client
+google-auth-oauthlib
+google-auth
+pytz
+httpx
+socket
