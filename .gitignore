@@ -166,3 +166,6 @@ G_credentials/service.json
 service_account_creds.py
 Debian_KP_Phill2.ppk
 Debian_KP_Phill.pem
+secrets_parameters.py
+rclone_sync.py
+duties.csv

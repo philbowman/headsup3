@@ -1,0 +1,193 @@
+<queries>
+    <query name="headsup_calendar_days" flattened="true">
+        <description>calendar_days</description>
+        <args>
+			<arg name="school_id_in" type="primitive" required="true" />
+			<arg name="start_date" type="primitive" required="true" />
+			<arg name="end_date" type="primitive" required="true" />
+        </args>
+        <columns>
+			<column column="calendar_day.id">id</column>
+			<column column="calendar_day.dcid">dcid</column>
+			<column column="calendar_day.date_value">date_value</column>
+			<column column="calendar_day.insession">insession</column>
+			<column column="calendar_day.note">note</column>
+			<column column="calendar_day.bell_schedule_id">bell_schedule_id</column>
+			<column column="calendar_day.schoolid">schoolid</column>
+			<column column="bell_schedule.dcid">bs_dcid</column>
+			<column column="bell_schedule.name">bs_name</column>
+ 		</columns>
+        <sql>
+			<![CDATA[
+				SELECT DISTINCT
+					calendar_day.id,
+					calendar_day.dcid,
+					calendar_day.date_value,
+					calendar_day.insession,
+					calendar_day.note,
+					calendar_day.bell_schedule_id,
+					calendar_day.schoolid,
+					bell_schedule.dcid as bs_dcid,
+					bell_schedule.name
+				FROM
+					calendar_day, bell_schedule
+				WHERE
+					bell_schedule.dcid = calendar_day.bell_schedule_id AND
+					calendar_day.schoolid = :school_id_in AND
+					calendar_day.date_value >= TO_DATE(:start_date, 'YYYY-MM-DD') AND
+					calendar_day.date_value <= TO_DATE(:end_date, 'YYYY-MM-DD')
+
+				ORDER BY
+					calendar_day.date_value
+			]]>
+        </sql>
+    </query>
+   <query name="headsup_section_meetings" flattened="true">
+        <description>section_meetings</description>
+        <args>
+			<arg name="termdcid" type="primitive" required="true" />
+			<arg name="schoolid" type="primitive" required="true" />
+			<arg name="bell_schedule_id" type="primitive" required="true" />
+        </args>
+        <columns>
+			<column column="teachers.last_name">last_name</column>
+			<column column="teachers.lastfirst">lastfirst</column>
+			<column column="teachers.email_addr">teacher_email</column>
+			<column column="courses.course_name">course_name</column>
+			<column column="terms.abbreviation">term_name</column>
+			<column column="section_meeting.meeting">section_meeting</column>
+			<column column="section_meeting.period_number">period_number</column>
+			<column column="section_meeting.cycle_day_letter">cycle_day_letter</column>
+			<column column="sections.schoolid">schoolid</column>
+			<column column="sections.id">section_id</column>
+			<column column="sections.dcid">section_dcid</column>
+			<column column="sections.no_of_students">no_of_students</column>
+			<column column="period.abbreviation">period_abbreviation</column>
+			<column column="bell_schedule_items.start_time">start_time</column>
+			<column column="bell_schedule_items.end_time">end_time</column>
+ 		</columns>
+        <sql>
+			<![CDATA[
+				SELECT DISTINCT
+					teachers.last_name,
+					teachers.lastfirst,
+					teachers.email_addr,
+					courses.course_name,
+					terms.abbreviation as term_name,
+					section_meeting.meeting as code,
+					section_meeting.period_number,
+					section_meeting.cycle_day_letter,
+					sections.schoolid,
+					sections.id,
+					sections.dcid,
+					sections.no_of_students,
+					period.abbreviation,
+					bell_schedule_items.start_time,
+					bell_schedule_items.end_time
+				FROM
+					sections, teachers, terms, courses, section_meeting, period, bell_schedule_items
+				WHERE
+					terms.dcid = :termdcid AND
+					sections.schoolid = :schoolid AND
+					section_meeting.sectionid = sections.id AND
+					sections.teacher = teachers.id AND
+					sections.termid = terms.id AND
+					sections.course_number = courses.course_number AND
+					period.period_number = section_meeting.period_number AND
+					bell_schedule_items.period_id = period.id AND
+					bell_schedule_items.bell_schedule_id = :bell_schedule_id
+				ORDER BY
+					sections.id, teachers.lastfirst, section_meeting.period_number
+			]]>
+			
+        </sql>
+    </query>  
+	<query name="headsup_blocks" flattened="true">
+        <description>blocks</description>
+        <args>
+			<arg name="calendar_day_dcid_in" type="primitive" required="true" />
+			<arg name="school_id" type="primitive" required="true" />
+        </args>
+        <columns>
+			<column column="period.abbreviation">abbreviation</column>
+			<column column="period.period_number">period_number</column>
+			<column column="bell_schedule_items.start_time">start_time</column>
+			<column column="bell_schedule_items.end_time">end_time</column>
+			<column column="bell_schedule_items.bell_schedule_id">bell_schedule_id</column>
+			<column column="calendar_day.schoolid">schoolid</column>
+			<column column="calendar_day.id">id</column>
+			<column column="calendar_day.dcid">dcid</column>
+ 		</columns>
+        <sql>
+			<![CDATA[
+				SELECT distinct
+					period.abbreviation,
+					period.period_number,
+					bell_schedule_items.start_time,
+					bell_schedule_items.end_time,
+					bell_schedule_items.bell_schedule_id,
+					calendar_day.schoolid,
+					calendar_day.id as calendar_day_id,
+					calendar_day.dcid as calendar_day_dcid
+
+				FROM 
+					bell_schedule_items, period, bell_schedule, calendar_day
+					
+				WHERE
+					calendar_day.dcid = :calendar_day_dcid_in AND
+					period.id=bell_schedule_items.period_id AND
+					bell_schedule.id=bell_schedule_items.bell_schedule_id AND
+					calendar_day.bell_schedule_id=bell_schedule.id AND
+					calendar_day.schoolid = :school_id
+				ORDER BY
+					bell_schedule_items.start_time
+			]]>
+			
+        </sql>
+    </query> 
+     
+   <query name="headsup_roster" flattened="true">
+        <description>event_times</description>
+        <args>
+			<arg name="section_dcid" type="primitive" required="true" />
+        </args>
+        <columns>
+			<column column="students.dcid">students_dcid</column>
+			<column column="students.id">students_id</column>
+			<column column="students.last_name">last_name</column>
+			<column column="students.first_name">first_name</column>
+			<column column="students.lastfirst">lastfirst</column>
+			<column column="students.grade_level">grade_level</column>
+			<column column="psm_studentcontact.email">email</column>
+			<column column="sections.dcid">sections_dcid</column>
+			<column column="sections.id">sections_id</column>
+ 		</columns>
+        <sql>
+			<![CDATA[
+				SELECT
+                    students.dcid,
+                    students.id,
+                    students.last_name,
+                    students.first_name,
+                    students.lastfirst,
+                    students.grade_level,
+					psm_studentcontact.email,
+					sections.dcid as sections_dcid,
+					sections.id as sections_id
+                FROM
+					cc
+				INNER JOIN sections ON cc.sectionid = sections.id
+				INNER JOIN students ON cc.studentid = students.id
+				JOIN sync_studentmap on sync_studentmap.studentsdcid = students.dcid
+				JOIN psm_studentcontact ON psm_studentcontact.studentid = sync_studentmap.studentid
+				
+				WHERE
+					sections.dcid = :section_dcid AND
+                	psm_studentcontact.studentcontacttypeid=21633
+                ORDER BY
+					students.lastfirst, students.dcid
+			]]>
+			
+        </sql>
+    </query>  
+</queries>

@@ -1,5 +1,5 @@
 <queries>
-    <query name="org.psugcal.ps8.school.headsup_calendar_days" flattened="true">
+    <query name="headsup_calendar_days" flattened="true">
         <description>calendar_days</description>
         <args>
 			<arg name="school_id_in" type="primitive" required="true" />
@@ -14,22 +14,27 @@
 			<column column="calendar_day.note">note</column>
 			<column column="calendar_day.bell_schedule_id">bell_schedule_id</column>
 			<column column="calendar_day.schoolid">schoolid</column>
+			<column column="bell_schedule.dcid">bs_dcid</column>
+			<column column="bell_schedule.name">bs_name</column>
  		</columns>
         <sql>
 			<![CDATA[
-				SELECT distinct
+				SELECT DISTINCT
 					calendar_day.id,
 					calendar_day.dcid,
 					calendar_day.date_value,
 					calendar_day.insession,
 					calendar_day.note,
 					calendar_day.bell_schedule_id,
-					calendar_day.schoolid
+					calendar_day.schoolid,
+					bell_schedule.dcid as bs_dcid,
+					bell_schedule.name
 				FROM
-					calendar_day
+					calendar_day, bell_schedule
 				WHERE
+					bell_schedule.dcid = calendar_day.bell_schedule_id AND
 					calendar_day.schoolid = :school_id_in AND
-					calendar_day.date_value >= TO_DATE(:start_date, 'YYYY-MM-DD')AND
+					calendar_day.date_value >= TO_DATE(:start_date, 'YYYY-MM-DD') AND
 					calendar_day.date_value <= TO_DATE(:end_date, 'YYYY-MM-DD')
 
 				ORDER BY
@@ -37,7 +42,7 @@
 			]]>
         </sql>
     </query>
-   <query name="org.psugcal.ps8.school.headsup_section_meetings" flattened="true">
+   <query name="headsup_section_meetings" flattened="true">
         <description>section_meetings</description>
         <args>
 			<arg name="termdcid" type="primitive" required="true" />
@@ -97,7 +102,7 @@
 			
         </sql>
     </query>  
-	<query name="org.psugcal.ps8.school.headsup_blocks" flattened="true">
+	<query name="headsup_blocks" flattened="true">
         <description>blocks</description>
         <args>
 			<arg name="calendar_day_dcid_in" type="primitive" required="true" />
@@ -135,13 +140,13 @@
 					calendar_day.bell_schedule_id=bell_schedule.id AND
 					calendar_day.schoolid = :school_id
 				ORDER BY
-					period.period_number
+					bell_schedule_items.start_time
 			]]>
 			
         </sql>
     </query> 
      
-   <query name="org.psugcal.ps8.school.headsup_roster" flattened="true">
+   <query name="headsup_roster" flattened="true">
         <description>event_times</description>
         <args>
 			<arg name="section_dcid" type="primitive" required="true" />
