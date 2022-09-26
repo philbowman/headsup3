@@ -13,14 +13,16 @@ from socket import error as SocketError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-"""
+
+from urllib.error import HTTPError
+
 logging.basicConfig(
-     filename='log_file_name.log',
+     filename='debug.log',
      level=logging.DEBUG, 
      format= '[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
      datefmt='%H:%M:%S'
  )
- """
+ 
 formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
 #log to file
 filelog = TimedRotatingFileHandler("info.log", when='midnight', backupCount=20)
@@ -42,7 +44,6 @@ delegated_creds = creds.with_subject(calendar_manager_email)
 service = build('calendar', 'v3', credentials=delegated_creds)
 
 
-
 def my_retry(fn):
     from functools import wraps
     @wraps(fn)
@@ -57,7 +58,7 @@ def my_retry(fn):
                 return fn(self, *args, **kwargs)
             except (socket.timeout, SocketError, HttpError, TimeoutError, httpx.ReadTimeout, httpx.ConnectError, httpx.ReadError, httpx.ConnectTimeout) as e:
                 failures += 1
-                message = f"failed {failures} times: \n{e}"
+                message = f"request failed {failures} times: \n{e}"
                 logging.info(message)
                 print(message)
                 sleep(sleep_time)
@@ -65,9 +66,9 @@ def my_retry(fn):
     return wrapped
 
 def main():
-    #print(Query().calendar_days("2022-09-24", "2022-10-04", 681005))
-    run_update()
+    #run_update()
     counter = 0
+    
     while True:
         now = datetime.datetime.now()
 
@@ -97,6 +98,7 @@ def main():
             send_email("OOPS!", e)
 
 def run_update():
+    
     runtime_start = time.time()
     
     now = datetime.datetime.now()
@@ -104,11 +106,12 @@ def run_update():
         now = now + datetime.timedelta(days=1)
     
     start_date = now.strftime("%Y-%m-%d")
-    
     edt = now + datetime.timedelta(days=30)
     end_date = edt.strftime("%Y-%m-%d")
 
-    #end_date = s2_end_date
+    #override
+    #start_date = "2022-09-26"
+    #end_date = "2022-09-27"
 
 
     schools = [School(ms_schoolid, ms_calendarid, ms_bell_schedule_calendarid, ms_rotation_calendarid, ms_duty_calendarid, "MS"),
@@ -128,11 +131,37 @@ class School:
         self.block_calendarid = block_calendarid
         self.rotation_calendarid = rotation_calendarid
         self.duty_calendarid = duty_calendarid
-        self.calendarids = [self.schoolid, self.calendarid, self.block_calendarid, self.rotation_calendarid, self.duty_calendarid]
+        self.calendarids = [self.calendarid, self.block_calendarid, self.rotation_calendarid, self.duty_calendarid]
         self.abbreviation = abbreviation
         self.days = []
+        self.duty_periods = self.make_duty_periods()
+        logging.info("INITIALIZED " + str(self))
 
-    def add_day(self, ps_day, date_range):
+    def __str__(self):
+        return f"SCHOOL {self.abbreviation}"
+
+    def make_duty_periods(self):
+        duty_periods = []
+        try:
+            with open("duties.csv", 'r', encoding='UTF-8') as myfile:
+                reader = csv.DictReader(myfile)
+                for row in reader:
+                    if row['school'] == self.abbreviation:
+                        duty_periods.append(row['period'])
+                
+        except FileNotFoundError:
+            logging.info("no duties.csv file found")
+        return duty_periods
+
+
+    def add_day(self, datestr, ps_day, date_range):
+        if not ps_day:
+            for id in self.calendarids:
+                logging.info(f"deleting all events on {datestr}")
+                logging.info(f"calendarid: {id}")
+                delete_all_events(datestr, datestr, id)
+            return None
+        logging.info(f"adding {self.abbreviation} day on {datestr}")
         d = Day(ps_day, date_range, self)
         self.days.append(d)
         return d
@@ -153,11 +182,16 @@ class Date_Range:
         for date in self.date_list:
             for school in schools:
                 datestr = date.strftime('%Y-%m-%d')
-                ps_day = self.ps_days(datestr, datestr, school.schoolid)
-                self.days.append(school.add_day(ps_day, self))
-    
+                ps_day = self.make_ps_days(datestr, datestr, school.schoolid)
+                day = school.add_day(datestr, ps_day, self)
+                if day:
+                    self.days.append(day)
+        logging.info(f"INITIALIZED {self}")
+    def __str__(self):
+        return f"DATE RANGE {self.start_date}-{self.end_date}"
+
     @my_retry
-    def ps_days(self, start_date, end_date, schoolid):
+    def make_ps_days(self, start_date, end_date, schoolid):
         cd = []
         school_days = self.client.calendar_days(start_date, end_date, schoolid)
         if len(school_days) == 1:
@@ -170,10 +204,8 @@ class Date_Range:
 
 class Day:
     def __init__(self, ps_day, date_range, school):
+        logging.info(f"creating day {ps_day['date_value']}")
         self.client = date_range.client
-        if not ps_day:
-            for id in school.calendarids:
-                delete_all_events(ps_day['date_value'], ps_day['date_value'], id)
         #inherit from date_range and section_meeting query
         self.day = ps_day
         self.calendar_day_dcid = ps_day['dcid']
@@ -185,8 +217,6 @@ class Day:
         self.term = self.query_term()
         self.term_abbreviations = self.make_term_abbreviations()
         self.term_abbreviation = self.term['abbreviation']
-        print(self.termdcids)
-        print(self.terms)
 
         #strings to use for allday titles
         self.block_string = "" #constructed during make_block_meetings
@@ -222,11 +252,17 @@ class Day:
         
         #allday events
         self.allday_event = All_Day_Event(self)
-    
+
+        logging.info("INITIALIZED" + str(self))
+
+    def __str__(self):
+        return f"DAY {self.date} {self.term_abbreviation} {self.term_abbreviations} {self.school}"
+
     def make_term_abbreviations(self):
         abr = []
         for t in self.terms:
             abr.append(t['abbreviation'])
+        logging.info(f"terms for {self.day['date_value']}: {abr}")
         return abr
 
         
@@ -270,7 +306,6 @@ class Day:
             meeting_set = self.client.section_meetings(termid, self.schoolid, self.day['bell_schedule_id'])
             for m in meeting_set:
                 try:
-                    logging.info(m['teacher_email'])
                     if m['teacher_email'] not in selected_teachers and update_only_selected_teachers:
                         continue
                     else:
@@ -314,7 +349,7 @@ class Day:
             desired_gcal_event_ids.append(e['id'])
 
         #logging.info(f"desired events: {desired_events}")
-        logging.info(f"desired ids: {desired_gcal_event_ids}")
+        logging.debug(f"desired ids: {desired_gcal_event_ids}")
         deleted_events = []
         for e in existing_events:
             if e['id'] not in desired_gcal_event_ids:
@@ -325,7 +360,7 @@ class Day:
             else:
                 logging.info(f"Not deleting {e['id']}")
 
-        logging.info("deleted events: \n" + str(deleted_events))
+        logging.debug("deleted events: \n" + str(deleted_events))
         return deleted_events
 
     @my_retry
@@ -373,7 +408,8 @@ class Event:
                 self.title = t
             else:
                 self.title = meeting['abbreviation']
-            self.duties = self.make_duty_events()
+            if self.title in self.school.duty_periods:
+                self.duties = self.make_duty_events()
         if event_type == "duty":
             self.no_of_students = -1
             self.section_dcid = -1
@@ -384,7 +420,10 @@ class Event:
         self.end_datetime = self.date + datetime.timedelta(seconds=self.end_timestamp)
         self.meeting_time = f"{self.start_datetime.isoformat()}-{self.end_datetime.isoformat()[-8:]}"
         self.calendar_event = self.make_calendar_event()
-        logging.info(self)
+        logging.info("INITIALIZED " + str(self))
+
+    def __str__(self):
+        return f"EVENT {self.title} {self.meeting_time} [{len(self.emails)} attendees]"
 
     def make_duty_events(self):
         logging.info(f"making {self.school.abbreviation} duties for {self.title} on Day {self.day.number}" )
@@ -394,26 +433,26 @@ class Event:
                 reader = csv.DictReader(myfile)
                 #TODO remove blank lines
                 for row in reader:
-                    logging.info(str(row))
+                    logging.debug(str(row))
                     if not (row['email'] and row['duty'] and row['day'] and row['period'] and row['semester'] and row['school']):
-                        logging.info("...skipping")
+                        logging.debug("...skipping")
                         continue
                     if row['school'] == self.school.abbreviation and row['period'] == self.title and row['semester'] in self.day.term_abbreviations and str(row['day']) == str(self.day.number):
-                        logging.info("...creating")
+                        logging.info(f"creating {str(row)}")
                         duty = {'teacher_emails': row['email'].replace(" ", "").split(","), 'title': row['duty'] + " Duty", 'day': "Day " + row['day']}
                         d = Event(self.meeting, self.day, "duty", duty)
                         duties.append(d)
                         self.day.duty_events.append(d)
                         self.day.desired_duty_events.append(d.calendar_event.gcal_event)
                     else:
-                        logging.info("...skipping")
+                        logging.debug("...skipping")
         except FileNotFoundError:
             logging.error("no duties.csv file found")
         return duties
 
     @my_retry
     def make_emails_list(self):
-        logging.info(self.meeting)
+        logging.debug(self.meeting)
         e = [self.meeting['teacher_email']]
         if extra_invites:
             for exc in extra_invites:
@@ -431,9 +470,6 @@ class Event:
             logging.info("creating Calendar Event")
             return Calendar_Event(self)
         return None
-
-    def __str__(self):
-        return f"{self.title} {self.meeting_time} {self.emails}"
 
 class Calendar_Event:
     def __init__(self, event, skip_students=False):
@@ -456,6 +492,10 @@ class Calendar_Event:
 
         self.payload = self.make_payload()
         self.gcal_event = self.update()
+        logging.info(f"INITIALIZED {self}")
+
+    def __str__(self):
+        return f"CALENDAR EVENT {self.title} ({self.school})"
 
     def make_payload(self):
         attendees = []
@@ -499,22 +539,24 @@ class Calendar_Event:
         }
         return payload
 
-    def compare_attendees(remote):
+    def compare_attendees(self,remote):
         remote_emails = []
         for a in remote:
             remote_emails.append(a['email'])
-            if a['email'] not in self.emails:
+            if a['email'] not in self.event.emails:
+                logging.debug(f"{a['email']} not in {self.event.emails}")
                 return False
-        for e in self.emails:
+        for e in self.event.emails:
             if e not in remote_emails:
+                logging.debug(f"{e} not in {remote_emails}")
                 return False
         return True
 
     @my_retry
     def update(self):
-        logging.info("updating " + self.payload['summary'])
-        logging.info(self.payload)
-        logging.info(f"{len(self.existing_events)} existing events")
+        logging.info(f"updating {self.payload['summary']} on {self.event.day.date}")
+        logging.debug(self.payload)
+        logging.debug(f"{len(self.existing_events)} existing events")
         for event in self.existing_events:    
             try:
                 #find by name
@@ -528,16 +570,17 @@ class Calendar_Event:
                     else:
                         #patch changed event
                         logging.info(f"patching {self.payload['summary']}")
-                        logging.info(f"payload: {self.payload['extendedProperties']['shared']}")
-                        logging.info(f"existing: {event['extendedProperties']['shared']}")
+                        logging.debug(f"payload: {self.payload['extendedProperties']['shared']}")
+                        logging.debug(f"existing: {event['extendedProperties']['shared']}")
                         return service.events().patch(calendarId=self.calendarid, eventId=event['id'], body=self.payload, sendUpdates="none").execute()
             except (KeyError, TypeError) as e:
-                logging.debug(event['summary'] + "does not match:")
-                logging.debug(e)
+                logging.warn(f"{event['summary']} does not match {self.payload['summary']}")
+                logging.warn(e)
         return self.add()
 
     @my_retry
     def add(self):
+        logging.info(f"adding {self.title}")
         gcal_event = None
         self.make_payload()
         gcal_event = service.events().insert(conferenceDataVersion=1, calendarId=self.calendarid, body=self.payload, sendUpdates="none").execute()
@@ -581,6 +624,10 @@ class All_Day_Event:
         self.existing_events = self.update_existing_events()
         self.gcal_event = self.update()
         self.deleted_events = self.delete_extra_events()
+        logging.info(f"INITIALIZED {self}")
+
+    def __str__(self):
+        return f"ALLDAY EVENT {self.title}"
 
     def make_payload(self):        
         payload =  {
@@ -643,11 +690,11 @@ class All_Day_Event:
                 if e['id'] != self.gcal_event['id']:
                     service.events().delete(calendarId=self.calendarid, eventId=e['id'], sendUpdates="none").execute()
                     deleted_events.append(e)
-                    logging.info("Successfully deleted" + e['summary'])
+                    logging.debug(f"Deleted {e['summary']} \n(not in desired list)")
                 else:
-                    logging.info(f"Not deleting {e['id']}")
+                    logging.debug(f"Not deleting {e['id']}")
 
-        logging.info("deleted events: \n" + str(deleted_events))
+        logging.debug("deleted events: \n" + str(deleted_events))
         return deleted_events
 
 class Query:
@@ -754,10 +801,11 @@ def remove_dupes(l):
             seen.add(t)
             new_l.append(d)
         else:
-            logging.info("removed dupe: " + str(d))
+            logging.debug("removed dupe: " + str(d))
 
     return new_l
 
+@my_retry
 def delete_all_events(start_date_str, end_date_str, calendarid):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d")
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d")

@@ -2,6 +2,8 @@
 secrets.py
 *.zip
 
+*.log.*
+
 #scraps
 /scraps
 
@@ -169,3 +171,6 @@ Debian_KP_Phill.pem
 secrets_parameters.py
 rclone_sync.py
 duties.csv
+commands.md
+sync_calendar copy.py
+sync_calendar 2.py
