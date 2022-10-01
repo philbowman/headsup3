@@ -6,11 +6,11 @@ COPY . .
 
 RUN apt-get update
 
-RUN apt-get install rclone
+RUN apt-get --assume-yes install rclone
 
-RUN apt-get install cron
+RUN apt-get --assume-yes install cron
 
-RUN apt-get install nano
+RUN apt-get --assume-yes install nano
 
 RUN pip install -r requirements.txt
 

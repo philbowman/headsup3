@@ -62,6 +62,7 @@
 			<column column="sections.id">section_id</column>
 			<column column="sections.dcid">section_dcid</column>
 			<column column="sections.no_of_students">no_of_students</column>
+			<column column="sections.room">room</column>
 			<column column="period.abbreviation">period_abbreviation</column>
 			<column column="bell_schedule_items.start_time">start_time</column>
 			<column column="bell_schedule_items.end_time">end_time</column>
@@ -81,6 +82,7 @@
 					sections.id,
 					sections.dcid,
 					sections.no_of_students,
+					sections.room,
 					period.abbreviation,
 					bell_schedule_items.start_time,
 					bell_schedule_items.end_time
