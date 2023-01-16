@@ -19,7 +19,7 @@ delegated_creds = creds.with_subject(calendar_manager_email)
 service = build('calendar', 'v3', credentials=delegated_creds)
     
 def main(start_date=None, end_date=None):
-    #run_update()
+    run_update()
     counter = 0
     while True:
         now = datetime.datetime.now()
@@ -58,16 +58,19 @@ def run_update(start_date=None, end_date=None):
             now = now + datetime.timedelta(days=1)
         start_date = now.strftime("%Y-%m-%d")
     if end_date == None:
-        edt = datetime.datetime.strptime(start_date, "%Y-%m-%d") + datetime.timedelta(days=30)
-        end_date = edt.strftime("%Y-%m-%d")
+        end_date = s2_end_date
+        # edt = datetime.datetime.strptime(start_date, "%Y-%m-%d") + datetime.timedelta(days=30)
+        # end_date = edt.strftime("%Y-%m-%d")
 
     #override
-    #start_date = "2022-09-26"
-    end_date = s2_end_date
+    #start_date = "2023-01-19"
+    #end_date = "2022-01-20"
+
+    
 
 
     schools = [School(ms_schoolid, ms_calendarid, ms_bell_schedule_calendarid, ms_rotation_calendarid, ms_duty_calendarid, "MS"),
-        School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS")]
+        School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True)]
 
     date_range = Date_Range(schools, start_date, end_date)
     
@@ -77,7 +80,7 @@ def run_update(start_date=None, end_date=None):
     return runtime
 
 class School:
-    def __init__(self, schoolid, calendarid, block_calendarid, rotation_calendarid, duty_calendarid, abbreviation):
+    def __init__(self, schoolid, calendarid, block_calendarid, rotation_calendarid, duty_calendarid, abbreviation, make_allschool_events=False):
         self.schoolid = schoolid
         self.calendarid = calendarid
         self.block_calendarid = block_calendarid
@@ -85,6 +88,7 @@ class School:
         self.duty_calendarid = duty_calendarid
         self.calendarids = [self.calendarid, self.block_calendarid, self.rotation_calendarid, self.duty_calendarid]
         self.abbreviation = abbreviation
+        self.make_allschool_events = make_allschool_events
         self.days = []
         self.duty_periods = self.make_duty_periods()
         logger.info("INITIALIZED " + str(self))
@@ -107,6 +111,7 @@ class School:
                 
         except FileNotFoundError:
             logger.info("no duties.csv file found")
+        logger.debug(f"{self.abbreviation} duty periods: {duty_periods}")
         return duty_periods
 
 
@@ -136,6 +141,7 @@ class Date_Range:
             self.end_date = start_date
         
         self.date_list = pandas.date_range(start=start_date, end=end_date).to_pydatetime().tolist()
+        logger.debug(self.date_list)
         for date in self.date_list:
             for school in schools:
                 datestr = date.strftime('%Y-%m-%d')
@@ -150,6 +156,7 @@ class Date_Range:
         logger.info(f"INITIALIZED {self}")
     def __str__(self):
         return f"DATE RANGE {self.start_date}-{self.end_date}"
+        
 
     @my_retry
     def make_ps_days(self, start_date, end_date, schoolid):
@@ -173,9 +180,9 @@ class Day:
         self.date_range = date_range
         self.school = school
         self.schoolid = school.schoolid
-        self.termdcids = self.query_term_dcids()
         self.terms = []
         self.term = self.query_term()
+        self.termdcids = self.query_term_dcids()
         self.term_abbreviations = self.make_term_abbreviations()
         self.term_abbreviation = self.term['abbreviation']
 
@@ -203,7 +210,7 @@ class Day:
 
         #duty events
 
-        self.deleted_block_events = self.delete_extra_events(self.duty_events, self.existing_duty_events, self.desired_duty_events, self.school.duty_calendarid)
+        self.deleted_duty_events = self.delete_extra_events(self.duty_events, self.existing_duty_events, self.desired_duty_events, self.school.duty_calendarid)
                 
         #class events
         self.desired_class_events = []
@@ -214,6 +221,8 @@ class Day:
         
         #allday events
         self.allday_event = All_Day_Event(self)
+        if self.school.make_allschool_events == True:
+            self.allschool_allday_event = All_Day_Event(self, True)
 
         logger.info(f"INITIALIZED {self}")
 
@@ -230,10 +239,14 @@ class Day:
         
     def query_term(self):
         terms = self.client.terms(self.day['date_value'], self.schoolid)
-        self.terms = terms
-        earliest_end_date = terms[0]['lastday']
-        term = terms[0]
-        for t in terms:
+        
+        self.terms = [t for t in terms if t['firstday'] <= self.day['date_value'] and t['lastday'] >= self.day['date_value']]
+        if not self.terms:
+            return None
+        term = self.terms[0]
+        earliest_end_date = term['lastday']
+        for t in self.terms:
+            # find the term with the earliest end date
             if t['lastday'] < earliest_end_date:
                 term = t
                 earliest_end_date = t['lastday']
@@ -252,9 +265,9 @@ class Day:
 
         return "Day " + str(self.number)
 
-    @my_retry
     def query_term_dcids(self):
-        return self.client.termdcids(self.day['date_value'], self.schoolid)
+        return [t['dcid'] for t in self.terms]
+        # return self.client.termdcids(self.day['date_value'], self.schoolid)
 
     @my_retry
     def update_existing_events(self, calendarid):
@@ -498,6 +511,7 @@ class Calendar_Event:
             "description": self.description,
             "location": self.event.room,
             "attendees": self.attendees,
+            "visibility": "public",
             "extendedProperties": 
             {
                 "shared": 
@@ -527,6 +541,9 @@ class Calendar_Event:
             pairs = zip(self.attendees, sorted_attendees)
             logger.debug(f"paired attendees: {tuple(pairs)}")
             if any(x['email'] != y['email'] for x, y in pairs) == False:
+                for attendee in event['attendees']:
+                    if attendee['responseStatus'] != "accepted":
+                        return False
                 return True
             logger.warn("attendees do not match")
             return False
@@ -554,16 +571,18 @@ class Calendar_Event:
                     attendees_match = self.compare_attendees(event)
 
                     #compare extended properties
-                    if self.payload['extendedProperties']['shared'] == event['extendedProperties']['shared'] and attendees_match:
+                    if self.payload['extendedProperties']['shared'] == event['extendedProperties']['shared'] and attendees_match and self.payload['start']['dateTime'] == event['start']['dateTime'][:-6] and self.payload['end']['dateTime'] == event['end']['dateTime'][:-6] and "visibility" in event.keys() and self.payload['visibility'] == event['visibility']:
                         logger.info("Existing event is up to date")
+                        logger.debug(event)
                         return event
                     else:
-                        #patch changed event
+                        #update changed event
                         logger.debug(f"shared properties are the same? {self.payload['extendedProperties']['shared'] == event['extendedProperties']['shared']}")
-                        logger.info(f"patching {self.payload['summary']}")
+                        logger.info(f"updating {self.payload['summary']}")
                         logger.debug(f"payload: {self.payload['extendedProperties']['shared']}")
-                        logger.debug(f"existing: {event['extendedProperties']['shared']}")
-                        new_event = service.events().patch(calendarId=self.calendarid, eventId=event['id'], body=self.payload, sendUpdates="none").execute()
+                        logger.debug(f"existing: {event}")
+
+                        new_event = service.events().update(calendarId=self.calendarid, eventId=event['id'], body=self.payload, sendUpdates="none").execute()
                         #double checking. Attributes are sometimes in the wrong order or are empty on the calendar, but don't exist locally. This is to prevent patching the event every time the script runs.
                         if self.payload['extendedProperties']['shared'] == new_event['extendedProperties']['shared'] and self.compare_attendees(new_event):
                             return new_event
@@ -606,16 +625,21 @@ class Calendar_Event:
         logger.info("Successfully deleted" + event['summary'])
     
 class All_Day_Event:
-    def __init__(self, day):
+    def __init__(self, day, allschool=False):
         self.day = day
         self.name = day.name
-        self.title = day.name + "-" + day.block_string
+        if allschool == True:
+            self.title = day.name
+            self.calendarid = allschool_rotation_calendar_id
+        else:
+            self.title = day.name + "-" + day.block_string
+            self.calendarid = day.school.rotation_calendarid
         self.date = day.day['date_value']
         self.school = day.school
         self.block_string = day.block_string
         self.event_type = "allday"
         self.description = ""
-        self.calendarid = day.school.rotation_calendarid 
+        
 
         self.payload = self.make_payload()
         self.existing_events = self.update_existing_events()
@@ -670,8 +694,8 @@ class All_Day_Event:
 
                         return event
                     else:
-                        logger.info(f"patching {payload['summary']}")
-                        return service.events().patch(calendarId=self.calendarid, eventId=event['id'], body=self.payload, sendUpdates="none").execute()
+                        logger.info(f"updating {payload['summary']}")
+                        return service.events().update(calendarId=self.calendarid, eventId=event['id'], body=self.payload, sendUpdates="none").execute()
             except (KeyError, TypeError) as e:
                 logger.debug(event['summary'] + "does not match:")
                 logger.debug(e)
@@ -683,11 +707,20 @@ class All_Day_Event:
         self.existing_events = self.update_existing_events()
         deleted_events = []
         for e in self.existing_events:
-            if e['extendedProperties']['shared']['event_type'] == "allday":
+            is_allday = False
+            try:
+                if e['extendedProperties']['shared']['event_type'] == "allday":
+                    logger.debug(f"found allday event {e}")
+                    is_allday = True
+            except KeyError:
+                if e['summary'][:4] == "Day ":
+                    logger.debug(f"found allday event {e}")
+                    is_allday = True
+            if is_allday:
                 if e['id'] != self.gcal_event['id']:
                     service.events().delete(calendarId=self.calendarid, eventId=e['id'], sendUpdates="none").execute()
                     deleted_events.append(e)
-                    logger.debug(f"Deleted {e['summary']} \n(not in desired list)")
+                    logger.debug(f"Deleted {e['summary']} (not in desired list)")
                 else:
                     logger.debug(f"Not deleting {e['id']}")
 

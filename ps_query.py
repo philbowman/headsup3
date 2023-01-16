@@ -15,6 +15,14 @@ class Query:
         logger.debug(response)
         return response
 
+    def assignments(self, sectiondcid):
+        query_name = "/ws/xte/section/assignment/"
+        p = {
+            "section_ids": sectiondcid
+        }
+        assignments = self.client.powerquery(query_name, p)
+        return assignments
+
     def calendar_days(self, start_date, end_date, schoolid):
         query_name = "/ws/schema/query/" + "headsup_calendar_days"
         p = {
@@ -75,14 +83,17 @@ class Query:
         return terms
 
     def termdcids(self, date, schoolid):
-            #get the yearid
+        #get the yearid
         query_name = "/ws/schema/query/" + "com.pearson.core.terms.yearid"
         p = {
         "schoolid": 0,
         "currentdate": date
         }
         yearids = self.call(query_name, p)
-        yearid = yearids[0]['yearid']
+        try:
+            yearid = yearids[0]['yearid']
+        except IndexError:
+            return []
 
         #get the terms for the year
         query_name = "/ws/schema/query/" + "com.pearson.core.terms.year_terms"
@@ -94,7 +105,7 @@ class Query:
         terms = self.call(query_name, p)
 
         for t in terms:
-            if t['firstday'] < date and t['lastday'] > date:
+            if t['firstday'] <= date and t['lastday'] >= date:
                 termdcids.append(t['dcid'])
         return termdcids
 
