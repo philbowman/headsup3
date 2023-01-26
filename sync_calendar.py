@@ -63,11 +63,11 @@ def run_update(start_date=None, end_date=None):
         # end_date = edt.strftime("%Y-%m-%d")
 
     #override
-    #start_date = "2023-01-19"
+    #start_date = "2023-01-29"
     #end_date = "2022-01-20"
 
-    
-
+    # HS only
+    # schools = [School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True)]
 
     schools = [School(ms_schoolid, ms_calendarid, ms_bell_schedule_calendarid, ms_rotation_calendarid, ms_duty_calendarid, "MS"),
         School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True)]
@@ -532,28 +532,29 @@ class Calendar_Event:
 
     def compare_attendees(self, event):
         logger.debug(f"desired attendees: {self.attendees}")
-        try:
-            if len(self.attendees) != len(event['attendees']):
+        
+        if 'attendees' not in event.keys():
+            logger.debug("No existing attendees")
+            if self.attendees:
                 logger.warn("attendees do not match")
                 return False
-            sorted_attendees = sorted(event['attendees'], key=lambda a: a['email'])
-            logger.debug(f"existing: {sorted_attendees}")
-            pairs = zip(self.attendees, sorted_attendees)
-            logger.debug(f"paired attendees: {tuple(pairs)}")
-            if any(x['email'] != y['email'] for x, y in pairs) == False:
-                for attendee in event['attendees']:
-                    if attendee['responseStatus'] != "accepted":
-                        return False
-                return True
-            logger.warn("attendees do not match")
-            return False
-        except (KeyError, TypeError) as e:
-            logger.debug(e)
-            logger.debug("No attendees in remote event")
-            if self.attendees:
-                logger.debug(f"desired attendees: {self.attendees}")
-                return False
             return True
+        else:
+            logger.debug(f"existing attendees: {event['attendees']}")
+            if len(self.attendees) != len(event['attendees']):
+                return False
+            desired_attendee_emails = [a['email'] for a in self.attendees]
+            for attendee in event['attendees']:
+                if attendee['responseStatus'] != "accepted" or attendee['email'] not in desired_attendee_emails:
+                    logger.warn("attendees do not match")
+                    return False
+            existing_attendee_emails = [a['email'] for a in event['attendees']]
+            for email in desired_attendee_emails:
+                if email not in existing_attendee_emails:
+                    logger.warn("attendees do not match")
+                    return False
+            return True
+
 
 
     @my_retry
