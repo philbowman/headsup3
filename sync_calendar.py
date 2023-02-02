@@ -17,7 +17,50 @@ creds = service_account.Credentials.from_service_account_file(
 		SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 delegated_creds = creds.with_subject(calendar_manager_email)
 service = build('calendar', 'v3', credentials=delegated_creds)
-    
+
+# def make_teacher_event_public(calendar_event):
+# 	# set 
+# 	api_calls = 0
+# 	errors = []
+# 	logger.info(f"Removing reminders for {person}...")
+# 	# TODO: why creds and not creds2? Which servicea ccounts are these and why??
+# 	p_creds = creds.with_subject(person.email)
+# 	p_service = build('calendar', 'v3', credentials=p_creds)
+# 	logger.info(f"Calling Calendar API to get existing events between {timeMin} and {timeMax}")
+# 	for event_type in ["class", "team"]:
+# 		api_calls += 1
+# 		try:
+# 			event_query = p_service.events().list(calendarId=person.email, sharedExtendedProperty=f"event_type={event_type}", timeMin=timeMin, timeMax=timeMax).execute()
+# 			events = event_query.get('items', [])
+# 		except HttpError as e:
+# 			logger.error(f"error when listing events on {timeMin} for {person}: {e}")
+# 			errors.append(f"error when listing events on {timeMin} for {person}: {e}")
+
+# 		no_reminders = {
+# 			"reminders": {
+# 				"useDefault": False,
+# 				"overrides": []
+# 			}
+# 		}
+# 		responses = []
+# 		for event in events:
+# 			if event['reminders']['useDefault'] == True:
+# 				logger.debug(f"...Calling API to remove reminders for {event['summary']} on {event['start']['dateTime']}")
+				
+# 				try:
+# 					api_calls += 1
+# 					response = p_service.events().patch(calendarId=person.email, eventId = event['id'], body=no_reminders).execute()
+# 					logger.debug(f"...API response: {response['summary']}")
+# 				except HttpError as e:
+# 					logger.error(f"error when removing reminders for {person}-{event['summary']}: {e}; not retrying")
+# 					errors.append(f"error when removing reminders for {person}-{event['summary']}: {e}; not retrying")
+# 					logger.info(f"...quitting removing reminders")
+# 					logger.debug(f"events: {events}")
+# 					break
+# 			else:
+# 				logger.debug(f"..._reminders already removed for {event['summary']} on {event['start']['dateTime']}")
+# 	return {'api_calls': api_calls, 'errors': errors}
+
 def main(start_date=None, end_date=None):
     run_update()
     counter = 0
@@ -191,6 +234,7 @@ class Day:
         self.number = ""
         self.block_abbreviations = []
         self.name = self.make_day_name()
+        self.teacher_emails = []
 
         self.desired_duty_events = []
         self.duty_events = [] #generated at the Event level
@@ -209,7 +253,6 @@ class Day:
         self.deleted_block_events = self.delete_extra_events(self.block_events, self.existing_block_events, self.desired_block_events, self.school.block_calendarid)
 
         #duty events
-
         self.deleted_duty_events = self.delete_extra_events(self.duty_events, self.existing_duty_events, self.desired_duty_events, self.school.duty_calendarid)
                 
         #class events
@@ -223,11 +266,30 @@ class Day:
         self.allday_event = All_Day_Event(self)
         if self.school.make_allschool_events == True:
             self.allschool_allday_event = All_Day_Event(self, True)
-
+        self.make_teacher_events_public()
         logger.info(f"INITIALIZED {self}")
 
     def __str__(self):
         return f"DAY {self.date} {self.term_abbreviation} {self.term_abbreviations} {self.school}"
+    
+    def make_teacher_events_public(self):
+        logger.info(f"Making event public on teacher calendars...")
+        for email in self.teacher_emails:
+            logger.info(f"Impersonating {email}")
+            p_service = make_impersonated_service(email)
+            teachers_events = list_events_impersonated(p_service, email, str(self.localized_daystart.isoformat()), str(self.localized_dayend.isoformat()), "event_type=class")
+            teachers_events += list_events_impersonated(p_service, email, str(self.localized_daystart.isoformat()), str(self.localized_dayend.isoformat()), "event_type=duty")
+            print(teachers_events)
+            payload = {"visibility": "public"}
+            for event in teachers_events:
+                if 'visibility' not in event or event['visibility'] != "public":
+                    logger.info(f"making event public for {email}: {event['summary']}")
+                    logger.debug(event)
+                    patch_event_impersonated(p_service, event['id'], payload)
+                else:
+                    logger.debug("event is already public:")
+                    logger.debug(event)
+
 
     def make_term_abbreviations(self):
         abr = []
@@ -270,8 +332,11 @@ class Day:
         # return self.client.termdcids(self.day['date_value'], self.schoolid)
 
     @my_retry
-    def update_existing_events(self, calendarid):
-        events = service.events().list(maxResults=2500, calendarId=calendarid, timeMin=str(self.localized_daystart.isoformat()), timeMax=str(self.localized_dayend.isoformat())).execute().get('items', [])
+    def update_existing_events(self, calendarid, sharedextendedproperty=None):
+        if sharedextendedproperty and len(sharedextendedproperty) == 1:
+            events = service.events().list(sharedExtendedProperty=sharedextendedproperty, maxResults=2500, calendarId=calendarid, timeMin=str(self.localized_daystart.isoformat()), timeMax=str(self.localized_dayend.isoformat())).execute().get('items', [])    
+        else:
+            events = service.events().list(maxResults=2500, calendarId=calendarid, timeMin=str(self.localized_daystart.isoformat()), timeMax=str(self.localized_dayend.isoformat())).execute().get('items', [])
         return events
 
     @my_retry
@@ -467,23 +532,30 @@ class Calendar_Event:
         self.skip_students = skip_students
         self.attendees = [] #generated in make_payload
         self.description = ""
-
+        
         if event.event_type == "block":
             self.calendarid = self.school.block_calendarid
             self.existing_events = event.day.existing_block_events
+            self.teacher_emails = []
         if event.event_type == "class":
             self.calendarid = self.school.calendarid
             self.existing_events = event.day.existing_class_events
+            self.teacher_emails = [self.event.teacher_email]
         if event.event_type == "duty":
             self.calendarid = self.school.duty_calendarid
             self.existing_events = event.day.existing_duty_events
-
+            self.teacher_emails = [em for em in self.event.emails if em]
+        for em in self.teacher_emails:
+            if em not in self.event.day.teacher_emails:
+                self.event.day.teacher_emails.append(em)
         self.payload = self.make_payload()
         self.gcal_event = self.update()
+
         logger.info(f"INITIALIZED {self}")
 
     def __str__(self):
         return f"CALENDAR EVENT {self.title} ({self.school})"
+
 
     def make_payload(self):
         attendees = []
@@ -737,6 +809,24 @@ def delete_all_events(start_date_str, end_date_str, calendarid):
     existing_events = service.events().list(maxResults=2500, calendarId=calendarid, timeMin=str(localized_daystart.isoformat()), timeMax=str(localized_dayend.isoformat())).execute().get('items', [])
     for e in existing_events:
         service.events().delete(calendarId=calendarid, eventId=e['id'], sendUpdates="none").execute()
+
+@my_retry
+def make_impersonated_service(email):
+    p_creds = creds.with_subject(email)
+    return build('calendar', 'v3', credentials=p_creds)
+
+@my_retry
+def list_events_impersonated(p_service, calendarid, timemin, timemax, extendedproperty=None):
+    if extendedproperty:
+        events = p_service.events().list(sharedExtendedProperty=extendedproperty, maxResults=2500, calendarId=calendarid, timeMin=timemin, timeMax=timemax).execute().get('items', [])    
+    else:
+        events = p_service.events().list(maxResults=2500, calendarId=calendarid, timeMin=timemin, timeMax=timemax).execute().get('items', [])
+    return events
+
+@my_retry
+def patch_event_impersonated(p_service, event_id, payload, calendar_id="primary"):
+    return p_service.events().patch(calendarId=calendar_id, eventId=event_id, body=payload, sendUpdates="none").execute()
+
 
 if __name__ == "__main__":
         if len(sys.argv) == 2:
