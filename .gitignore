@@ -175,3 +175,6 @@ commands.md
 sync_calendar copy.py
 sync_calendar 2.py
 sync_scores.py
+*.json
+*.csv
+*.icloud

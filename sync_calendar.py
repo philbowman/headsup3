@@ -18,51 +18,8 @@ creds = service_account.Credentials.from_service_account_file(
 delegated_creds = creds.with_subject(calendar_manager_email)
 service = build('calendar', 'v3', credentials=delegated_creds)
 
-# def make_teacher_event_public(calendar_event):
-# 	# set 
-# 	api_calls = 0
-# 	errors = []
-# 	logger.info(f"Removing reminders for {person}...")
-# 	# TODO: why creds and not creds2? Which servicea ccounts are these and why??
-# 	p_creds = creds.with_subject(person.email)
-# 	p_service = build('calendar', 'v3', credentials=p_creds)
-# 	logger.info(f"Calling Calendar API to get existing events between {timeMin} and {timeMax}")
-# 	for event_type in ["class", "team"]:
-# 		api_calls += 1
-# 		try:
-# 			event_query = p_service.events().list(calendarId=person.email, sharedExtendedProperty=f"event_type={event_type}", timeMin=timeMin, timeMax=timeMax).execute()
-# 			events = event_query.get('items', [])
-# 		except HttpError as e:
-# 			logger.error(f"error when listing events on {timeMin} for {person}: {e}")
-# 			errors.append(f"error when listing events on {timeMin} for {person}: {e}")
-
-# 		no_reminders = {
-# 			"reminders": {
-# 				"useDefault": False,
-# 				"overrides": []
-# 			}
-# 		}
-# 		responses = []
-# 		for event in events:
-# 			if event['reminders']['useDefault'] == True:
-# 				logger.debug(f"...Calling API to remove reminders for {event['summary']} on {event['start']['dateTime']}")
-				
-# 				try:
-# 					api_calls += 1
-# 					response = p_service.events().patch(calendarId=person.email, eventId = event['id'], body=no_reminders).execute()
-# 					logger.debug(f"...API response: {response['summary']}")
-# 				except HttpError as e:
-# 					logger.error(f"error when removing reminders for {person}-{event['summary']}: {e}; not retrying")
-# 					errors.append(f"error when removing reminders for {person}-{event['summary']}: {e}; not retrying")
-# 					logger.info(f"...quitting removing reminders")
-# 					logger.debug(f"events: {events}")
-# 					break
-# 			else:
-# 				logger.debug(f"..._reminders already removed for {event['summary']} on {event['start']['dateTime']}")
-# 	return {'api_calls': api_calls, 'errors': errors}
-
 def main(start_date=None, end_date=None):
-    run_update()
+    run_update(start_date, end_date)
     counter = 0
     while True:
         now = datetime.datetime.now()
@@ -93,6 +50,8 @@ def main(start_date=None, end_date=None):
                 logger.error(e)
                 send_email('pbowman@acsamman.edu.jo', "OOPS!", str(e))
 
+
+
 def run_update(start_date=None, end_date=None):
     runtime_start = time.time()
     if start_date == None:
@@ -100,8 +59,8 @@ def run_update(start_date=None, end_date=None):
         if now > now.replace(hour=15):
             now = now + datetime.timedelta(days=1)
         start_date = now.strftime("%Y-%m-%d")
-    if end_date == None:
-        end_date = s2_end_date
+    # if end_date == None:
+    #     end_date = s2_end_date
         # edt = datetime.datetime.strptime(start_date, "%Y-%m-%d") + datetime.timedelta(days=30)
         # end_date = edt.strftime("%Y-%m-%d")
 
@@ -112,8 +71,15 @@ def run_update(start_date=None, end_date=None):
     # HS only
     # schools = [School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True)]
 
-    schools = [School(ms_schoolid, ms_calendarid, ms_bell_schedule_calendarid, ms_rotation_calendarid, ms_duty_calendarid, "MS"),
-        School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True)]
+    schools = [School(hs_schoolid, hs_calendarid, hs_bell_schedule_calendarid, hs_rotation_calendarid, hs_duty_calendarid, "HS", True),
+               School(ms_schoolid, ms_calendarid, ms_bell_schedule_calendarid, ms_rotation_calendarid, ms_duty_calendarid, "MS", True)
+        ]
+
+    if end_date == None:
+        end_dates = []
+        for school in schools:
+            end_dates.append(latest_term_end_date(start_date, school.schoolid))
+        end_date = max(end_dates)
 
     date_range = Date_Range(schools, start_date, end_date)
     
@@ -165,6 +131,14 @@ class School:
                 logger.info(f"deleting all events on {datestr}")
                 logger.info(f"calendarid: {id}")
                 delete_all_events(datestr, datestr, id)
+
+            logger.info(f"deleting all ALLDAY events on {datestr}")
+            logger.info(f"{self.abbreviation} rotation calendarid: {self.rotation_calendarid}")
+            All_Day_Event.delete_all_events(datestr, datestr, self.rotation_calendarid)
+            if self.make_allschool_events == True:
+                for calendarid in allschool_rotation_calendar_ids:
+                    logger.info(f"allschool calendarid: {calendarid}")
+                    All_Day_Event.delete_all_events(datestr, datestr, calendarid)
             return None
         logger.info(f"adding {self.abbreviation} day on {datestr}")
         d = Day(ps_day, date_range, self)
@@ -184,10 +158,12 @@ class Date_Range:
             self.end_date = start_date
         
         self.date_list = pandas.date_range(start=start_date, end=end_date).to_pydatetime().tolist()
-        logger.debug(self.date_list)
+        logger.info(self.date_list)
         for date in self.date_list:
+            datestr = date.strftime('%Y-%m-%d')
+            for exclude_cal in exclude_rotaton_calendar_ids:
+                All_Day_Event.delete_all_events(datestr, datestr, exclude_cal)
             for school in schools:
-                datestr = date.strftime('%Y-%m-%d')
                 logger.info(f"adding {school.abbreviation} day {datestr}")
                 ps_day = self.make_ps_days(datestr, datestr, school.schoolid)
                 logger.info("ps_day: " + str(ps_day))
@@ -219,6 +195,7 @@ class Day:
         self.client = date_range.client
         #inherit from date_range and section_meeting query
         self.day = ps_day
+        self.bs_name = self.day['bs_name']
         self.calendar_day_dcid = ps_day['dcid']
         self.date_range = date_range
         self.school = school
@@ -228,6 +205,8 @@ class Day:
         self.termdcids = self.query_term_dcids()
         self.term_abbreviations = self.make_term_abbreviations()
         self.term_abbreviation = self.term['abbreviation']
+        #TODO this is a hack bc the cycle day letter comes from the bs_name in make_block_meetings(). Need to update plugin to grab cycle_day_letter in ps_query.py calendar_days()
+        self.cycle_day_letter = ps_day.get('cycle_day_letter', 'A')
 
         #strings to use for allday titles
         self.block_string = "" #constructed during make_block_meetings
@@ -263,9 +242,10 @@ class Day:
         self.deleted_class_events = self.delete_extra_events(self.class_events, self.existing_class_events, self.desired_class_events, self.school.calendarid)
         
         #allday events
-        self.allday_event = All_Day_Event(self)
+        self.allday_event = All_Day_Event(self, self.school.rotation_calendarid)
         if self.school.make_allschool_events == True:
-            self.allschool_allday_event = All_Day_Event(self, True)
+            for calendarid in allschool_rotation_calendar_ids:
+                self.allschool_allday_event = All_Day_Event(self, calendarid, True)
         self.make_teacher_events_public()
         logger.info(f"INITIALIZED {self}")
 
@@ -279,7 +259,6 @@ class Day:
             p_service = make_impersonated_service(email)
             teachers_events = list_events_impersonated(p_service, email, str(self.localized_daystart.isoformat()), str(self.localized_dayend.isoformat()), "event_type=class")
             teachers_events += list_events_impersonated(p_service, email, str(self.localized_daystart.isoformat()), str(self.localized_dayend.isoformat()), "event_type=duty")
-            print(teachers_events)
             payload = {"visibility": "public"}
             for event in teachers_events:
                 if 'visibility' not in event or event['visibility'] != "public":
@@ -315,12 +294,25 @@ class Day:
         return term
 
     def make_day_name(self):
-        bs_name = self.day['bs_name']
-        logger.info(f"bs name: {self.day['bs_name']}")
+        
+        logger.info(f"bs name: {self.bs_name}")
+
         #grab a single digit separated by spaces out of the bell schedule name after replacing underscores with spaces
-        numbers = [int(s) for s in bs_name.replace("_", " ").split() if s.isdigit()]
-        if len(numbers) == 1:
-            self.number = numbers[0]
+        #or grabs digits from multi-character bell schedule identifier (separated by spaces/underscores) such as 'A1' or 'B4'
+        split_bs_name = self.bs_name.replace("_", " ").split()
+        try:
+            daynumber = self.bs_name.replace("_", " ").replace(" ", "").split("(")[-1].replace(")", "")[-1]
+        except (IndexError, ValueError):
+            daynumber = ""
+        bs_identifiers = [s for s in split_bs_name if s[-1].isdigit()]
+        if len(bs_identifiers) == 1:
+            if daynumber.isdigit():
+                self.number = daynumber
+            else:
+                self.number = bs_identifiers[0][-1]
+            if len(bs_identifiers[0]) > 1:   
+                self.cycle_day_letter = bs_identifiers[0][0]
+
         else:
             self.number = "?"
         logger.info(f"number: {self.number}")
@@ -343,7 +335,7 @@ class Day:
     def make_class_meetings(self):
         meet = []
         for termid in self.termdcids:
-            meeting_set = self.client.section_meetings(termid, self.schoolid, self.day['bell_schedule_id'])
+            meeting_set = self.client.section_meetings(termid, self.schoolid, self.day['bell_schedule_id'], self.cycle_day_letter)
             for m in meeting_set:
                 try:
                     if m['teacher_email'] not in selected_teachers and update_only_selected_teachers:
@@ -352,11 +344,21 @@ class Day:
                         meet.append(m)
                 except KeyError:
                     continue
-                
+        meet = sorted(meet, key=lambda d: d['start_time'])
+
+        for m in meet:
+            blocks = [b for abbr, b in self.block_dict.items() if b['abbreviation'] == m['period_abbreviation']]
+            m['adjusted_abbreviation'] = m['period_abbreviation']
+            for b in blocks:
+                if m['start_time'] == b['start_time'] and m['end_time'] == b['end_time']:
+                    m['adjusted_abbreviation'] = b['adjusted_abbreviation']
+            # self.block_list.append(m['period_abbreviation'])
         return meet
 
     def make_class_events(self):
         e = []
+        logger.info("CLASS MEETINGS:")
+        logger.info(self.class_meetings)
         for m in self.class_meetings:
             if int(m['no_of_students']) > 0:
                 ev = Event(m, self, "class")
@@ -366,16 +368,35 @@ class Day:
 
     @my_retry
     def make_block_meetings(self):
+        # get blocks for the day from PS
         blocks = self.client.blocks(self.calendar_day_dcid, self.schoolid)
-        block_list = []
+
+        self.block_dict = {}
+        
         for b in blocks:
-            i = 2
-            while b['abbreviation'] in block_list:
-                b['abbreviation'] += str(i)
+            
+
+            logger.info(f"block dict: {self.block_dict}")
+            
+            # handle numbered (not lettered) period abbreviations
+            if b['abbreviation'].isdigit():
+                b['adjusted_abbreviation'] = period_abbreviation_exceptions[self.cycle_day_letter][str(b['abbreviation'])]
+            else:
+                b['adjusted_abbreviation'] = str(b['abbreviation'])
+
+            i = 2 #counter for multiple instances of a block
+            suffix = "" #string to add to end of period abbreviation in the case of multiple instances
+            b['instance'] = 1
+            while b['adjusted_abbreviation'] in self.block_dict and b['start_time'] != self.block_dict[b['abbreviation']]['start_time'] and b['end_time'] != self.block_dict[b['abbreviation']]['end_time']:
+                logger.info(f"{b['adjusted_abbreviation']} already in block dict")
+                b['adjusted_abbreviation'] = b['adjusted_abbreviation'] + str(i)
+                b['instance'] = i
                 i += 1
-            block_list.append(b['abbreviation'])
-        self.block_abbreviations = block_list
-        self.block_string = ",".join(block_list)
+            
+            logger.info(f"adjusted abbr: {b['adjusted_abbreviation']}")
+            self.block_dict[b['adjusted_abbreviation']] = b
+        self.block_abbreviations = [b for b in self.block_dict]
+        self.block_string = ",".join(self.block_abbreviations)
         logger.info(f"blocks: {self.block_abbreviations}")
         return blocks
 
@@ -441,7 +462,7 @@ class Event:
             self.no_of_students = int(meeting['no_of_students'])
             self.section_dcid = meeting['section_dcid']
             self.duties = []
-            prefix = meeting['period_abbreviation'] + "-"
+            prefix = meeting['adjusted_abbreviation'] + "-"
             self.title = f"{prefix}{meeting['course_name']} ({meeting['lastfirst']})"
             self.teacher_email = self.meeting['teacher_email']
             self.emails = self.make_emails_list()
@@ -451,10 +472,13 @@ class Event:
             self.section_dcid = -1
             self.emails = []
             t = None
-            if period_abbreviation_exceptions:
-                for exc in period_abbreviation_exceptions:
+
+            if period_title_exceptions:
+                for exc in period_title_exceptions:
                     if meeting['abbreviation'] == exc['abbreviation']:
                         t = exc['title']
+                        if meeting['instance'] > 1:
+                            t += " " + str(meeting['instance'])
                         break
             if t:
                 self.title = t
@@ -492,7 +516,7 @@ class Event:
                         continue
                     if row['school'] == self.school.abbreviation and row['period'] == self.title and row['semester'] in self.day.term_abbreviations and str(row['day']) == str(self.day.number):
                         logger.info(f"creating {str(row)}")
-                        duty = {'teacher_emails': row['email'].replace(" ", "").split(","), 'title': row['duty'] + " Duty", 'day': "Day " + row['day']}
+                        duty = {'teacher_emails': row['email'].replace(" ", "").replace("\n", "").split(","), 'title': row['duty'] + " Duty", 'day': "Day " + row['day']}
                         d = Event(self.meeting, self.day, "duty", duty)
                         duties.append(d)
                         self.day.duty_events.append(d)
@@ -511,6 +535,10 @@ class Event:
             for exc in extra_invites:
                 if self.title == exc['event_title']:
                     e.append(exc['email'])
+        if coteachers:
+            for t, ct in coteachers.items():
+                if self.teacher_email == t:
+                    e.append(ct)
 
         self.roster = self.client.roster(self.meeting)
         for s in self.roster:
@@ -698,20 +726,23 @@ class Calendar_Event:
         logger.info("Successfully deleted" + event['summary'])
     
 class All_Day_Event:
-    def __init__(self, day, allschool=False):
+    def __init__(self, day, calendarid, allschool=False):
         self.day = day
         self.name = day.name
+        self.calendarid = calendarid
         if allschool == True:
-            self.title = day.name
-            self.calendarid = allschool_rotation_calendar_id
+            if day.name == "Day 0":
+                self.title = "MS/HS " + day.name
+            else:
+                self.title = day.name
+            self.description = day.school.abbreviation + ": " + day.block_string
         else:
             self.title = day.name + "-" + day.block_string
-            self.calendarid = day.school.rotation_calendarid
+            self.description = ""
         self.date = day.day['date_value']
         self.school = day.school
         self.block_string = day.block_string
         self.event_type = "allday"
-        self.description = ""
         
 
         self.payload = self.make_payload()
@@ -739,8 +770,10 @@ class All_Day_Event:
                     "date": self.date,
                     "description": self.description,
                     "schoolid": str(self.school.schoolid),
-                    "blocks": self.block_string,
-                    "title": self.title
+                    "blocks": f"{self.school.abbreviation}: {self.block_string}",
+                    "title": self.title,
+                    "schedule": self.day.bs_name,
+                    "bs_name": self.day.bs_name
                 },
             }
         }
@@ -758,13 +791,18 @@ class All_Day_Event:
         logger.info(f"{len(self.existing_events)} existing events")
         for event in self.existing_events:    
             try:
-                #find by name
+                #find by extended properties
                 if event['extendedProperties']['shared']['event_type'] == "allday":
-                    logger.info("Found existing event")
+                    logger.info("Found existing event:")
+                    
+                    logger.info(event['extendedProperties']['shared'])
+                    logger.info(self.payload['extendedProperties']['shared'])
+                    self.update_description(event)
+                    if not self.title[self.title.index("Day ")+len("Day "):].isdigit():
+                        self.title = event['title']
 
                     if event['extendedProperties']['shared'] == payload['extendedProperties']['shared']:
                         logger.info("Existing event is up to date")
-
                         return event
                     else:
                         logger.info(f"updating {payload['summary']}")
@@ -774,6 +812,53 @@ class All_Day_Event:
                 logger.debug(e)
 
         return service.events().insert(conferenceDataVersion=1, calendarId=self.calendarid, body=self.payload, sendUpdates="none").execute()
+
+    def update_description(self, event):
+        blocks_dict = {s[:s.index(':')]: s[s.index(':')+2:] for s in self.payload['extendedProperties']['shared']['blocks'].split('\n')}
+        try:
+            for abbreviation, block_string in {s[:s.index(':')]: f"{s[s.index(':')+2:]}" for s in event['extendedProperties']['shared']['blocks'].split('\n')}.items():
+                blocks_dict.setdefault(abbreviation, block_string)
+        except ValueError:
+            pass
+        new_desc = []
+        for abbreviation, block_string in blocks_dict.items():
+            new_desc.append(f"{abbreviation}: {block_string}")
+        self.description = "\n".join(new_desc)
+        self.payload['description'] = self.description
+        self.payload['extendedProperties']['shared']['description'] = self.description
+        self.payload['extendedProperties']['shared']['blocks'] = self.description
+        return self.description
+
+
+    @my_retry
+    @staticmethod
+    def delete_all_events(start_date_str, end_date_str, calendarid):
+        logger.info("")
+        start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d")
+        end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d")
+        localized_daystart = pytz.timezone("Asia/Amman").localize(start_date).isoformat()
+        localized_dayend = pytz.timezone("Asia/Amman").localize(end_date + datetime.timedelta(hours=23, minutes=59)).isoformat()
+        print(start_date_str)
+        print(end_date_str)
+        print(localized_daystart)
+        print(localized_dayend)
+        print(calendarid)
+        existing_events = service.events().list(maxResults=2500, calendarId=calendarid, timeMin=localized_daystart, timeMax=localized_dayend).execute().get('items', [])
+        deleted_events = []
+        for e in existing_events:
+            try:
+                if e['extendedProperties']['shared']['event_type'] == "allday":
+                    logger.debug(f"found allday event {e}")
+                    service.events().delete(calendarId=calendarid, eventId=e['id'], sendUpdates="none").execute()
+                    deleted_events.append(e)
+                    logger.debug(f"Deleted {e['summary']} (not in desired list)")
+                else:
+                    logger.debug(f"Not deleting {e['id']}")
+            except KeyError:
+                logger.debug(f"Not deleting {e['id']}")
+
+        logger.debug("deleted events: \n" + str(deleted_events))
+        return deleted_events
 
     @my_retry
     def delete_extra_events(self):
@@ -827,6 +912,30 @@ def list_events_impersonated(p_service, calendarid, timemin, timemax, extendedpr
 def patch_event_impersonated(p_service, event_id, payload, calendar_id="primary"):
     return p_service.events().patch(calendarId=calendar_id, eventId=event_id, body=payload, sendUpdates="none").execute()
 
+def latest_term_end_date(date:str, schoolid):
+    client = Query()
+    terms = client.terms(date, schoolid)
+    latest_end_date = date
+
+    terms = [t for t in terms if t['lastday'] >= date]
+    if terms:
+        for t in terms:
+            # find the term with the earliest end date
+            if t['lastday'] > latest_end_date:
+                latest_end_date = t['lastday']
+    months_ahead = 12
+    term_end_dates = [latest_end_date]
+    for i in range(months_ahead):
+        one_month_later = datetime.datetime.strptime(latest_end_date, "%Y-%m-%d") + datetime.timedelta(days=30*i+1)
+        ed = client.terms(one_month_later.strftime("%Y-%m-%d"), schoolid)
+        ed = [t['lastday'] for t in ed]
+        # input(ed)
+        term_end_dates += ed
+                              
+    # input(term_end_dates)
+    # input(max(term_end_dates))
+    return max(term_end_dates)
+
 
 if __name__ == "__main__":
         if len(sys.argv) == 2:
@@ -835,3 +944,4 @@ if __name__ == "__main__":
             run_update(sys.argv[1], sys.argv[2])
         else:
             main()
+        # ps_query_test()

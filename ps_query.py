@@ -1,12 +1,12 @@
-# use pypypowerschool module included in this repo to run without ssh verification
-from pypowerschool import powerschool
+from pypypowerschool import Client as PSClient
+import datetime
 from my_retry import *
 from secrets_parameters import ps_url, client_id, client_secret
 from logdef import *
 
 class Query:
     def __init__(self):
-        self.client = powerschool.Client(ps_url, client_id, client_secret)
+        self.client = PSClient(ps_url, client_id, client_secret, 300)
 
     @my_retry
     def call(self, query_name, parameters):
@@ -23,6 +23,23 @@ class Query:
         assignments = self.client.powerquery(query_name, p)
         return assignments
 
+    def district_cycle_days(self, yearid_in=None):
+        if not yearid_in:
+            yearids = self.yearid()
+        else:
+            yearids = [yearid_in]
+
+        query_name = "/ws/schema/query/com.pearson.core.calendar.district_cycle_days"
+        cycle_days = []
+        for yearid in yearids:
+            p = {
+                "yearid": yearid
+            }
+            cd = self.call(query_name, p)
+            print(cd)
+            cycle_days += cd
+        return cycle_days
+    
     def calendar_days(self, start_date, end_date, schoolid):
         query_name = "/ws/schema/query/" + "headsup_calendar_days"
         p = {
@@ -43,7 +60,7 @@ class Query:
         blocks = self.call(query_name, p)
         return blocks
 
-    def section_meetings(self, termdcid, schoolid, bell_schedule_id):
+    def section_meetings(self, termdcid, schoolid, bell_schedule_id, cycle_day_letter=None):
         query_name = "/ws/schema/query/" + "headsup_section_meetings"
         p = {
             
@@ -52,8 +69,10 @@ class Query:
                 "bell_schedule_id": bell_schedule_id
         }
         section_meetings = self.call(query_name, p)
+        if cycle_day_letter:
+            return [s for s in section_meetings if cycle_day_letter == s['cycle_day_letter']]
         return section_meetings
-
+    
     def roster(self, event):
         query_name = "/ws/schema/query/" + "headsup_roster"
 
@@ -63,47 +82,52 @@ class Query:
         roster = self.call(query_name, p)
         return roster
 
-    def terms(self, date, schoolid):
-            #get the yearid
+    def yearid(self, currentdate=None):
+        if not currentdate:
+            date = datetime.datetime.now().strftime("%Y-%m-%d")
+        else:
+            date = currentdate
+        # print(date)
         query_name = "/ws/schema/query/" + "com.pearson.core.terms.yearid"
         p = {
         "schoolid": 0,
         "currentdate": date
         }
         yearids = self.call(query_name, p)
-        yearid = yearids[0]['yearid']
+        # print(yearids)
+        if not yearids:
+            return []
+        return [y['yearid'] for y in yearids]
 
-        #get the terms for the year
-        query_name = "/ws/schema/query/" + "com.pearson.core.terms.year_terms"
-        p = {
-        "schoolid": schoolid,
-        "yearid": yearid
-        }
-        terms = self.call(query_name, p)
+    def terms(self, date, schoolid):
+        #get the yearid
+        yearids = self.yearid(date)
+        terms = []
+        for yearid in yearids:
+            #get the terms for the year
+            query_name = "/ws/schema/query/" + "com.pearson.core.terms.year_terms"
+            p = {
+            "schoolid": schoolid,
+            "yearid": yearid
+            }
+            terms += self.call(query_name, p)
         return terms
 
     def termdcids(self, date, schoolid):
         #get the yearid
-        query_name = "/ws/schema/query/" + "com.pearson.core.terms.yearid"
-        p = {
-        "schoolid": 0,
-        "currentdate": date
-        }
-        yearids = self.call(query_name, p)
-        try:
-            yearid = yearids[0]['yearid']
-        except IndexError:
-            return []
+        yearids = self.yearid(date)
 
         #get the terms for the year
-        query_name = "/ws/schema/query/" + "com.pearson.core.terms.year_terms"
-        p = {
-        "schoolid": schoolid,
-        "yearid": yearid
-        }
+        terms = []
+        for yearid in yearids:
+            query_name = "/ws/schema/query/" + "com.pearson.core.terms.year_terms"
+            p = {
+            "schoolid": schoolid,
+            "yearid": yearid
+            }
+            
+            terms += self.call(query_name, p)
         termdcids = []
-        terms = self.call(query_name, p)
-
         for t in terms:
             if t['firstday'] <= date and t['lastday'] >= date:
                 termdcids.append(t['dcid'])
@@ -121,3 +145,12 @@ def remove_dupes(l):
             logger.debug("removed dupe: " + str(d))
 
     return new_l
+
+
+
+
+# def ps_query_test():
+#     date = ""
+#     while date != "exit":
+#         date = input("date: ")
+#         print(Query().district_cycle_days(date))
