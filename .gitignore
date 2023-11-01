@@ -165,16 +165,10 @@ cython_debug/
 #.idea/
 G_credentials/service.json
 .DS_Store
-service_account_creds.py
-Debian_KP_Phill2.ppk
-Debian_KP_Phill.pem
 secrets_parameters.py
 rclone_sync.py
 duties.csv
 commands.md
-sync_calendar copy.py
-sync_calendar 2.py
 sync_scores.py
 *.json
-*.csv
 *.icloud
