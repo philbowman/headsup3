@@ -48,7 +48,7 @@ def main(start_date=None, end_date=None):
         except Exception as e:
             if isinstance(e.__cause__, MyRetryError):
                 logger.error(e)
-                send_email('pbowman@acsamman.edu.jo', "OOPS!", str(e))
+                # send_email('email@email', "OOPS!", str(e))
 
 
 
@@ -85,7 +85,7 @@ def run_update(start_date=None, end_date=None):
     
     runtime = "runtime: " + str(datetime.timedelta(seconds=(time.time()-runtime_start)))
     logger.info(runtime)
-    send_email('pbowman@acsamman.edu.jo', "This was a triumph.", runtime)
+    # send_email('email@email', "This was a triumph.", runtime)
     return runtime
 
 class School:
